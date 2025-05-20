@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #00ff00;
+      --primary-dark: #004d00;
+      --primary-light: #00ff88;
+      --secondary-color: #ff00ff;
+      --secondary-dark: #4d004d;
+      --secondary-light: #ff88ff;
+      --error-color: #ff4444;
+      --bg-dark: #1a1a1a;
+      --bg-darker: #0d0d0d;
+      --bg-medium: #2a2a2a;
+      --bg-light: #3a3a3a;
+      --text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+      --box-shadow: 0 0 12px rgba(0, 255, 0, 0.4);
+      --glow-color: rgba(0, 255, 0, 0.6);
+    }
+    .purple-theme {
+      --primary-color: #ff00ff;
+      --primary-dark: #4d004d;
+      --primary-light: #ff88ff;
+      --text-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+      --box-shadow: 0 0 12px rgba(255, 0, 255, 0.4);
+      --glow-color: rgba(255, 0, 255, 0.6);
+    }
+    * {
+      box-sizing: border-box;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    body {
+      margin: 0;
+      padding: 15px;
+      background: linear-gradient(135deg, var(--bg-darker), var(--bg-dark));
+      color: var(--primary-color);
+      position: relative;
+      overflow-x: hidden;
+      transition: background 0.5s, color 0.5s;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    #backgroundCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -2;
+      pointer-events: none;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+      opacity: 0.2;
+      z-index: -1;
+      animation: glitch 4s infinite;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.1) 2px, rgba(0, 0, 0, 0.1) 3px);
+      opacity: 0.3;
+      z-index: -1;
+      animation: scanline 6s linear infinite;
+    }
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+    @keyframes glitch {
+      0%, 100% { transform: translate(0, 0); opacity: 0.2; }
+      2% { transform: translate(3px, -3px); opacity: 0.15; }
+      4% { transform: translate(-3px, 2px); opacity: 0.2; }
+    }
+    .window {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: linear-gradient(to bottom, #1a1a1a, #2a2a2a, #1a1a1a);
+      border: 2px solid;
+      border-image: linear-gradient(to bottom right, var(--primary-color), var(--primary-dark)) 1;
+      box-shadow: var(--box-shadow);
+      padding: 15px;
+      border-radius: 10px;
+      animation: fadeIn 0.5s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .title-bar {
+      background: linear-gradient(to right, var(--primary-dark), var(--primary-color));
+      color: #000;
+      padding: 8px 10px;
+      margin: -15px -15px 12px;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      text-shadow: var(--text-shadow);
+      animation: typing 2s steps(20) 1;
+      font-size: 15px;
+    }
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+    .theme-toggle, button {
+      background: linear-gradient(45deg, var(--bg-medium), var(--bg-light));
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      position: relative;
+      overflow: hidden;
+      font-size: 10px;
+    }
+    .theme-toggle::after, button::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--glow-color), transparent);
+      transition: left 0.5s;
+    }
+    .theme-toggle:hover::after, button:hover::after {
+      left: 100%;
+    }
+    .theme-toggle:hover, button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 15px var(--glow-color);
+      background: var(--bg-light);
+    }
+    button:disabled {
+      border-color: var(--primary-dark);
+      color: var(--primary-dark);
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+    }
+    .sidebar, .main, .metadata-section {
+      background: linear-gradient(to bottom, #1a1a1a, #222222, #2a2a2a);
+      padding: 15px;
+      border: 1px solid var(--primary-color);
+      border-radius: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      animation: slideIn 0.5s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .sidebar:hover, .main:hover, .metadata-section:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px var(--box-shadow);
+    }
+    .sidebar { flex: 1; max-width: 300px; }
+    .main { flex: 3; display: flex; flex-direction: column; gap: 20px; }
+    .preview-section { display: flex; gap: 20px; }
+    .preview-canvas { flex: 1; }
+    .metadata-section { flex: 1; max-width: 300px; }
+    .preview-buttons { display: flex; gap: 12px; }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 12px;
+    }
+    .gallery-item {
+      border: 1px solid var(--primary-color);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-dark);
+      cursor: pointer;
+      transition: transform 0.3s, box-shadow 0.3s;
+      animation: popIn 0.3s ease-out;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .gallery-item:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 20px var(--glow-color);
+    }
+    .gallery-item img { width: 100%; height: 100px; object-fit: cover; }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: linear-gradient(to bottom, #1a1a1a, #2a2a2a);
+      border: 2px solid var(--primary-color);
+      border-radius: 12px;
+      padding: 25px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: modalFadeIn 0.4s ease-in;
+      box-shadow: var(--box-shadow);
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-header { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+    .modal-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .modal-counter { font-size: 11px; text-shadow: var(--text-shadow); }
+    .modal-content img {
+      width: 100%;
+      max-height: 400px;
+      object-fit: contain;
+      border: 1px solid var(--primary-color);
+      border-radius: 8px;
+      margin-bottom: 15px;
+      transition: opacity 0.3s;
+    }
+    .modal-content img.fade { opacity: 0; }
+    .trait-list, .trait-editor {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .trait-list div {
+      background: var(--bg-medium);
+      padding: 5px 10px;
+      border: 1px solid var(--primary-color);
+      border-radius: 6px;
+      font-size: 10px;
+      text-align: center;
+      transition: background 0.2s;
+    }
+    .trait-list div:hover {
+      background: var(--bg-light);
+    }
+    .trait-editor div { display: flex; flex-direction: column; }
+    .trait-editor label { font-size: 10px; margin-bottom: 3px; }
+    .trait-editor select { padding: 3px; font-size: 10px; }
+    .duplicate-warning {
+      color: var(--error-color);
+      font-size: 10px;
+      margin-top: 10px;
+      text-align: center;
+      display: none;
+      text-shadow: 0 0 5px var(--error-color);
+    }
+    .duplicate-warning.show { display: block; }
+    .nft-name {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-shadow: var(--text-shadow);
+    }
+    .close-modal, .download-nft, .delete-button {
+      border: 1px solid var(--error-color);
+      color: var(--error-color);
+      padding: 5px 10px;
+      font-size: 10px;
+    }
+    .close-modal:hover, .download-nft:hover, .delete-button:hover {
+      background: var(--error-color);
+      color: #fff;
+      box-shadow: 0 0 10px var(--error-color);
+    }
+    .download-nft { border-color: var(--primary-color); color: var(--primary-color); }
+    .download-nft:hover { background: var(--bg-light); border-color: var(--primary-light); }
+    .replace-one {
+      border: 1px solid var(--secondary-color);
+      color: var(--secondary-color);
+      padding: 5px 10px;
+      font-size: 10px;
+    }
+    .replace-one:hover {
+      background: var(--secondary-color);
+      color: #fff;
+      box-shadow: 0 0 10px var(--secondary-light);
+    }
+    .custom-traits-section {
+      margin-top: 15px;
+      padding: 10px;
+      background: linear-gradient(to bottom, #1a1a1a, #222222);
+      border: 1px solid var(--primary-color);
+      border-radius: 8px;
+    }
+    .custom-trait-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .custom-trait-item {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .custom-trait-item input {
+      font-size: 10px;
+      padding: 4px;
+    }
+    .custom-trait-item button {
+      border-color: var(--error-color);
+      color: var(--error-color);
+      font-size: 10px;
+    }
+    .custom-trait-item button:hover {
+      background: var(--error-color);
+      color: #fff;
+    }
+    h2 {
+      font-size: 16px;
+      margin: 0 0 12px;
+      text-shadow: var(--text-shadow);
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+      animation: typing 1.5s steps(20) 1;
+    }
+    .layer-item, .trait-item, .rarity-item, .exclusion-item {
+      background: linear-gradient(to right, var(--bg-medium), var(--bg-dark));
+      border: 1px solid var(--primary-color);
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 8px;
+      transition: background 0.2s, transform 0.2s;
+      font-size: 10px;
+    }
+    .layer-item { cursor: move; }
+    .layer-item:hover, .trait-item:hover { background: var(--bg-light); transform: scale(1.03); }
+    .layer-item.dragging { opacity: 0.6; transform: scale(0.97); }
+    .layer-header, .trait-rarity-header, .trait-exclusion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    .layer-header:hover, .trait-rarity-header:hover, .trait-exclusion-header:hover {
+      color: var(--primary-light);
+    }
+    .layer-traits, .trait-rarity-content, .trait-exclusion-content {
+      display: none;
+      margin-top: 10px;
+    }
+    .layer-traits.show, .trait-rarity-content.show, .trait-exclusion-content.show {
+      display: block;
+      animation: slideDown 0.3s ease-out;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; max-height: 0; }
+      to { opacity: 1; max-height: 500px; }
+    }
+    .trait-weight { width: 50px; padding: 3px; font-size: 10px; }
+    input, select, textarea {
+      background: var(--bg-dark);
+      border: 2px solid var(--primary-color);
+      color: var(--primary-color);
+      padding: 5px;
+      border-radius: 6px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-size: 10px;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary-light);
+      background: var(--bg-medium);
+      box-shadow: 0 0 10px var(--glow-color);
+      outline: none;
+    }
+    textarea { width: 100%; resize: vertical; min-height: 60px; max-height: 180px; }
+    canvas {
+      border: 2px solid var(--primary-color);
+      background: #000;
+      border-radius: 8px;
+      box-shadow: var(--box-shadow);
+    }
+    label { font-size: 10px; margin-bottom: 4px; display: block; }
+    .tooltip { position: relative; display: inline-block; }
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 140px;
+      background: var(--bg-dark);
+      color: var(--primary-color);
+      text-align: center;
+      border-radius: 6px;
+      padding: 8px;
+      position: absolute;
+      z-index: 1;
+      bottom: 130%;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      border: 1px solid var(--primary-color);
+      box-shadow: var(--box-shadow);
+      animation: flicker 0.5s infinite alternate;
+      font-size: 10px;
+    }
+    @keyframes flicker {
+      0% { opacity: 0.9; }
+      100% { opacity: 1; }
+    }
+    .tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
+    .progress-container { display: none; margin: 10px 0; text-align: center; }
+    .progress-container.show { display: block; }
+    .progress-bar {
+      width: 100%;
+      height: 10px;
+      background: var(--bg-medium);
+      border: 1px solid var(--primary-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+      width: 0;
+      transition: width 0.3s ease;
+    }
+    .progress-text { margin-top: 5px; font-size: 10px; }
+    .spinner {
+      display: none;
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--primary-color);
+      border-top: 3px solid transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 10px auto;
+    }
+    .spinner.show { display: block; }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    #previewControls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .trait-exclusion-section {
+      background: linear-gradient(to bottom, #1a1a1a, #222222, #2a2a2a);
+      border: 1px solid #ff4500;
+      padding: 15px;
+      margin: 12px 0;
+      border-radius: 10px;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .trait-exclusion-section button {
+      border-color: #ff4500;
+      color: #ff4500;
+      font-size: 10px;
+    }
+    .trait-exclusion-section button:hover {
+      border-color: #ff6347;
+      color: #ff6347;
+      background: var(--bg-light);
+      box-shadow: 0 0 10px rgba(255, 69, 0, 0.6);
+    }
+    .trait-exclusion-content {
+      max-width: 100%;
+      overflow-x: hidden;
+      margin-top: 12px;
+      padding: 8px;
+    }
+    .trait-exclusion-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 12px;
+      padding: 8px;
+    }
+    .trait-exclusion-form select,
+    .trait-exclusion-form button {
+      width: 100%;
+      padding: 6px;
+      font-size: 10px;
+    }
+    .exclusion-item {
+      background: linear-gradient(to right, var(--bg-medium), var(--bg-dark));
+      padding: 8px;
+      margin: 8px 0;
+      border: 1px solid #ff4500;
+      border-radius: 8px;
+      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .metadata-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 10px 0;
+    }
+    .metadata-checkbox input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--primary-color);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="backgroundCanvas"></canvas>
+  <div class="window">
+    <div class="title-bar">
+      <span>The Generator</span>
+      <button class="theme-toggle">Toggle Theme</button>
+    </div>
+    <div class="container">
+      <div class="sidebar">
+        <h2>Layers</h2>
+        <div class="tooltip">
+          <button>Add Layer</button>
+          <span class="tooltiptext">Add a new layer for traits</span>
+        </div>
+        <div class="tooltip">
+          <button>Import Project</button>
+          <span class="tooltiptext">Import a project folder with layers and traits</span>
+        </div>
+        <div id="layers"></div>
+        <div class="trait-exclusion-section">
+          <div class="trait-exclusion-header">
+            Trait Exclusion
+            <span id="traitExclusionToggle">▼</span>
+          </div>
+          <div class="trait-exclusion-content show" id="traitExclusion">
+            <div class="tooltip">
+              <button>Add Trait Exclusion</button>
+              <span class="tooltiptext">Prevent two traits from appearing together</span>
+            </div>
+            <div id="exclusionForm"></div>
+            <div id="exclusionList"></div>
+          </div>
+        </div>
+        <div class="trait-rarity-section">
+          <div class="trait-rarity-header">
+            Trait Rarity
+            <span id="traitRarityToggle">▼</span>
+          </div>
+          <div class="trait-rarity-content show" id="traitRarity"></div>
+        </div>
+      </div>
+      <div class="main">
+        <h2>Preview</h2>
+        <div class="preview-section">
+          <div class="preview-canvas">
+            <canvas id="previewCanvas" width="500" height="500"></canvas>
+            <div id="previewControls"></div>
+            <div class="preview-buttons">
+              <div class="tooltip">
+                <button>Preview Random NFT</button>
+                <span class="tooltiptext">Generate a random NFT preview</span>
+              </div>
+              <div class="tooltip">
+                <button id="generateGalleryButton">Generate Preview NFTs</button>
+                <span class="tooltiptext">Generate a gallery of NFT previews</span>
+              </div>
+            </div>
+            <label>
+              Number of NFTs (max 2222):
+              <input type="number" id="nftCount" value="100" min="1" max="2222">
+            </label>
+            <div class="progress-container" id="galleryProgress">
+              <div class="progress-bar">
+                <div class="progress-bar-fill" id="galleryProgressBar"></div>
+              </div>
+              <div class="progress-text" id="galleryProgressText">0%</div>
+              <button id="cancelGalleryButton" style="display: none;">Cancel</button>
+              <div class="spinner" id="gallerySpinner"></div>
+            </div>
+            <div class="gallery-section">
+              <h2>Preview Gallery</h2>
+              <div class="gallery-grid" id="galleryGrid"></div>
+            </div>
+          </div>
+          <div class="metadata-section">
+            <h2>Metadata Settings</h2>
+            <div class="tooltip">
+              <label for="metadataTitle">Collection Title:</label>
+              <input type="text" id="metadataTitle" value="Super NFT" placeholder="e.g., Super NFT Collection">
+              <span class="tooltiptext">Base title for all NFTs (ID appended)</span>
+            </div>
+            <div class="tooltip">
+              <label for="metadataDescription">Collection Description:</label>
+              <textarea id="metadataDescription" placeholder="A unique NFT collection">A unique NFT from the Super NFT Generator collection</textarea>
+              <span class="tooltiptext">Description for all NFTs</span>
+            </div>
+            <div class="tooltip metadata-checkbox">
+              <input type="checkbox" id="includeIPFS" checked>
+              <label for="includeIPFS">Include IPFS link in metadata</label>
+              <span class="tooltiptext">Some platforms require IPFS link, some don't</span>
+            </div>
+            <div class="tooltip">
+              <label for="ipfsCID">IPFS image CID:</label>
+              <input type="text" id="ipfsCID" placeholder="Enter IPFS CID">
+              <span class="tooltiptext">Enter the IPFS CID for your NFT images</span>
+            </div>
+            <div class="tooltip" id="exportMetadataContainer" style="display: none;">
+              <button id="exportMetadataButton">Export new Metadata</button>
+              <span class="tooltiptext">This will export new version of just the Jsons with newly updated IPFS information</span>
+            </div>
+          </div>
+        </div>
+        <div class="tooltip">
+          <button id="downloadNFTsButton">Download NFTs</button>
+          <span class="tooltiptext">Download NFTs from the preview gallery</span>
+        </div>
+        <div class="progress-container" id="nftProgress">
+          <div class="progress-bar">
+            <div class="progress-bar-fill" id="nftProgressBar"></div>
+          </div>
+          <div class="progress-text" id="nftProgressText">0%</div>
+          <button id="cancelNFTButton" style="display: none;">Cancel</button>
+          <div class="spinner" id="nftSpinner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="nftModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button class="download-nft" id="downloadNFTModalButton">Download NFT</button>
+        <button class="replace-one" id="replaceOneButton">Replace with 1/1</button>
+        <button class="close-modal">Close</button>
+      </div>
+      <div class="modal-nav">
+        <button id="prevButton">Previous</button>
+        <span class="modal-counter" id="modalCounter">1/1</span>
+        <button id="nextButton">Next</button>
+      </div>
+      <div class="nft-name" id="nftName"></div>
+      <img id="modalImage" src="" alt="NFT Preview">
+      <div class="trait-list" id="modalTraitList"></div>
+      <div class="trait-editor" id="modalTraitEditor"></div>
+      <div class="custom-traits-section" id="customTraitsSection" style="display: none;">
+        <h2 style="font-size: 14px;">Custom Traits for 1/1</h2>
+        <div class="tooltip">
+          <button id="addCustomTraitButton">Add Custom Trait</button>
+          <span class="tooltiptext">Add a custom layer and trait for this 1/1 NFT</span>
+        </div>
+        <div class="custom-trait-list" id="customTraitList"></div>
+      </div>
+      <div class="duplicate-warning" id="duplicateWarning">This NFT already exists</div>
+    </div>
+  </div>
+  <div class="footer" style="text-align: center; margin-top: 20px; padding: 15px; background: linear-gradient(to bottom, var(--bg-darker), var(--bg-dark)); border-top: 1px solid var(--primary-color); border-radius: 8px; box-shadow: var(--box-shadow);">
+    <p style="font-size: 12px; margin: 0 0 10px; text-shadow: var(--text-shadow);">
+      Created by <a href="https://x.com/lookupcatnip" target="_blank" style="color: var(--primary-light); text-decoration: none; font-weight: 700; transition: color 0.2s;">Catnip</a>
+    </p>
+    <div style="font-size: 10px; line-height: 1.6; color: var(--primary-color); text-shadow: var(--text-shadow);">
+      <p style="margin: 5px 0;">Donate</p>
+      <p style="margin: 5px 0; word-break: break-all;">Sol: <span style="color: var(--primary-light); font-family: 'JetBrains Mono', monospace;">BDRK87AEXBh4yY9wwSHhu6GajGgip6Jfq9atNcrPN4Tq</span></p>
+      <p style="margin: 5px 0; word-break: break-all;">Eth: <span style="color: var(--primary-light); font-family: 'JetBrains Mono', monospace;">0xEbB0870725874F1c4779271e2EE5B919e928faf5</span></p>
+    </div>
+  </div>
+  <script src="https://unpkg.com/jszip@3.7.1/dist/jszip.min.js"></script>
+  <script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script>
+    const initBackgroundAnimation = () => {
+      const canvas = document.getElementById('backgroundCanvas');
+      const ctx = canvas.getContext('2d');
+      let pixels = [];
+      const maxPixels = 50;
+
+      const resizeCanvas = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      };
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      const createPixel = () => {
+        const x = Math.random() * canvas.width;
+        const y = -10;
+        const size = Math.random() * 2 + 1;
+        const speed = Math.random() * 2 + 1;
+        const color = document.body.classList.contains('purple-theme') 
+          ? `rgba(255, 0, 255, ${Math.random() * 0.3 + 0.2})` 
+          : `rgba(0, 255, 0, ${Math.random() * 0.3 + 0.2})`;
+        const glitch = Math.random() < 0.05;
+        return { x, y, size, speed, color, glitch };
+      };
+
+      const updatePixels = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (pixels.length < maxPixels && Math.random() < 0.1) {
+          pixels.push(createPixel());
+        }
+        pixels = pixels.filter(pixel => pixel.y < canvas.height + pixel.size);
+        pixels.forEach(pixel => {
+          pixel.y += pixel.speed;
+          if (pixel.glitch && Math.random() < 0.1) {
+            pixel.x += (Math.random() - 0.5) * 10;
+          }
+          ctx.fillStyle = pixel.color;
+          ctx.beginPath();
+          ctx.arc(pixel.x, pixel.y, pixel.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        requestAnimationFrame(updatePixels);
+      };
+
+      document.querySelector('.theme-toggle').addEventListener('click', () => {
+        pixels = pixels.map(pixel => ({
+          ...pixel,
+          color: document.body.classList.contains('purple-theme') 
+            ? `rgba(255, 0, 255, ${Math.random() * 0.3 + 0.2})` 
+            : `rgba(0, 255, 0, ${Math.random() * 0.3 + 0.2})`
+        }));
+      });
+
+      updatePixels();
+    };
+
+    const state = {
+      layers: [],
+      previewTraits: new Map(),
+      galleryItems: [],
+      traitExclusions: [],
+      currentModalIndex: 0,
+      isGeneratingGallery: false,
+      isDownloadingNFTs: false,
+      isTraitRarityVisible: true,
+      isTraitExclusionVisible: true,
+      oneOfOneItems: new Map()
+    };
+
+    const debounce = (func, wait) => {
+      let timeout;
+      return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+      };
+    };
+
+    const createMetadata = (id, combination, layers) => {
+      const title = document.getElementById('metadataTitle').value.trim() || 'Super NFT';
+      const description = document.getElementById('metadataDescription').value.trim() || 'A unique NFT from the Super NFT Generator collection';
+      const includeIPFS = document.getElementById('includeIPFS').checked;
+      const ipfsCID = document.getElementById('ipfsCID').value.trim();
+      const oneOfOneData = state.oneOfOneItems.get(id - 1);
+      const metadata = {
+        name: `${title} #${id}`,
+        description,
+        attributes: oneOfOneData
+          ? oneOfOneData.customTraits
+              .filter(t => t.layerName && t.traitName)
+              .map(({ layerName, traitName }) => ({
+                trait_type: layerName,
+                value: traitName
+              }))
+          : layers
+              .filter(layer => combination[layer.name])
+              .map(layer => ({ trait_type: layer.name, value: combination[layer.name] }))
+      };
+      if (includeIPFS && ipfsCID) {
+        metadata.image = `ipfs://${ipfsCID}/${id}.png`;
+      } else if (includeIPFS) {
+        metadata.image = `ipfs://<replace-with-ipfs-hash>/${id}.png`;
+      }
+      return metadata;
+    };
+
+    const exportNewMetadata = async () => {
+      if (state.isDownloadingNFTs) return;
+      state.isDownloadingNFTs = true;
+      const exportButton = document.getElementById('exportMetadataButton');
+      const progressContainer = document.getElementById('nftProgress');
+      const progressBar = document.getElementById('nftProgressBar');
+      const progressText = document.getElementById('nftProgressText');
+      const cancelButton = document.getElementById('cancelNFTButton');
+      const spinner = document.getElementById('nftSpinner');
+      exportButton.disabled = true;
+      exportButton.textContent = 'Exporting...';
+      progressContainer.classList.add('show');
+      cancelButton.style.display = 'block';
+      spinner.classList.add('show');
+      try {
+        if (!state.galleryItems.length) throw new Error('No NFTs to export. Generate preview gallery first.');
+        const zip = new JSZip();
+        const title = document.getElementById('metadataTitle').value.trim() || 'Super NFT';
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+        for (let i = 0; i < state.galleryItems.length; i++) {
+          if (!state.isDownloadingNFTs) throw new Error('Export cancelled');
+          const item = state.galleryItems[i];
+          const metadata = createMetadata(i + 1, item.combination, state.layers);
+          zip.file(`${i + 1}.json`, JSON.stringify(metadata, null, 2));
+          const progress = ((i + 1) / state.galleryItems.length) * 100;
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${Math.round(progress)}%`;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `${sanitizedTitle}_Metadata.zip`);
+      } catch (error) {
+        alert(`Failed to export metadata: ${error.message}`);
+      } finally {
+        state.isDownloadingNFTs = false;
+        exportButton.disabled = false;
+        exportButton.textContent = 'Export new Metadata';
+        progressContainer.classList.remove('show');
+        cancelButton.style.display = 'none';
+        spinner.classList.remove('show');
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+      }
+    };
+
+    const loadImage = (blob, validateDimensions = false) => new Promise((resolve, reject) => {
+      console.log(`Loading image: ${blob.name || 'unknown'}`);
+      if (!(blob instanceof Blob) || !blob.type.startsWith('image/')) {
+        console.error(`Invalid file type for ${blob.name || 'unknown'}: ${blob.type}`);
+        return reject(new Error('Invalid file type. Only images are supported.'));
+      }
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.src = url;
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(url);
+        console.error(`Image loading timed out: ${blob.name || 'unknown'}`);
+        reject(new Error('Image loading timed out'));
+      }, 10000);
+      img.onload = () => {
+        clearTimeout(timeout);
+        console.log(`Image loaded successfully: ${blob.name || 'unknown'}, width: ${img.width}, height: ${img.height}`);
+        if (validateDimensions && (img.width <= 0 || img.height <= 0)) {
+          URL.revokeObjectURL(url);
+          console.error(`Invalid dimensions for ${blob.name || 'unknown'}: ${img.width}x${img.height}`);
+          reject(new Error('Invalid image dimensions'));
+        } else {
+          resolve({ img, url });
+        }
+      };
+      img.onerror = () => {
+        clearTimeout(timeout);
+        URL.revokeObjectURL(url);
+        console.error(`Failed to load image: ${blob.name || 'unknown'}`);
+        reject(new Error(`Failed to load image: ${blob.name || 'unknown'}`));
+      };
+    });
+
+    const updateLayersUI = () => {
+      console.log('Updating layers UI', state.layers);
+      const layersDiv = document.getElementById('layers');
+      layersDiv.innerHTML = state.layers.map((layer, index) => `
+        <div class="layer-item" draggable="true" data-index="${index}" data-id="${layer.id}">
+          <div class="layer-header">
+            ${layer.name} (${layer.zIndex})
+            <div>
+              <button class="delete-button">🗑️</button>
+              <span>${layer.showTraits ? '▼' : '▶'}</span>
+            </div>
+          </div>
+          <div class="layer-traits${layer.showTraits ? ' show' : ''}">
+            <div class="tooltip">
+              <button>Add Trait</button>
+              <span class="tooltiptext">Add a single trait image</span>
+            </div>
+            <div class="tooltip">
+              <button>Add Trait Folder</button>
+              <span class="tooltiptext">Add multiple traits from a folder</span>
+            </div>
+            ${layer.traits.map((trait, traitIndex) => `
+              <div class="trait-item">
+                ${trait.name}
+                <div>
+                  <input type="number" class="trait-weight" value="${trait.weight}" min="0.1" step="0.1">
+                  <button class="delete-button">🗑️</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      updatePreviewControls();
+      updateTraitRarity();
+      updateTraitExclusionUI();
+    };
+
+    const toggleTraitRarity = () => {
+      state.isTraitRarityVisible = !state.isTraitRarityVisible;
+      const content = document.getElementById('traitRarity');
+      const toggle = document.getElementById('traitRarityToggle');
+      content.classList.toggle('show', state.isTraitRarityVisible);
+      toggle.textContent = state.isTraitRarityVisible ? '▼' : '▶';
+    };
+
+    const updateTraitRarity = () => {
+      const rarityDiv = document.getElementById('traitRarity');
+      rarityDiv.innerHTML = state.layers.map(layer => {
+        const totalWeight = layer.traits.reduce((sum, t) => sum + t.weight, 0);
+        if (!totalWeight) return '';
+        return `
+          <div>
+            <strong>${layer.name}</strong>
+            ${layer.traits.map(trait => `
+              <div class="rarity-item">${trait.name}: ${((trait.weight / totalWeight) * 100).toFixed(2)}%</div>
+            `).join('')}
+          </div>
+        `;
+      }).join('');
+    };
+
+    const toggleTraitExclusion = () => {
+      state.isTraitExclusionVisible = !state.isTraitExclusionVisible;
+      const content = document.getElementById('traitExclusion');
+      const toggle = document.getElementById('traitExclusionToggle');
+      content.classList.toggle('show', state.isTraitExclusionVisible);
+      toggle.textContent = state.isTraitExclusionVisible ? '▼' : '▶';
+    };
+
+    const updateTraitExclusionUI = () => {
+      const exclusionList = document.getElementById('exclusionList');
+      exclusionList.innerHTML = state.traitExclusions.map((exclusion, index) => `
+        <div class="exclusion-item">
+          ${exclusion.trait1} ↔ ${exclusion.trait2}
+          <button class="delete-button">🗑️</button>
+        </div>
+      `).join('');
+    };
+
+    const addTraitExclusion = () => {
+      const allTraits = state.layers.flatMap(layer => 
+        layer.traits.map(trait => ({ layerName: layer.name, traitName: trait.name }))
+      );
+      if (allTraits.length < 2) return alert('Need at least two traits for exclusion.');
+      const existingForm = document.querySelector('#exclusionForm .trait-exclusion-form');
+      if (existingForm) return alert('Complete or cancel current exclusion rule.');
+      const form = document.createElement('div');
+      form.className = 'trait-exclusion-form';
+      form.innerHTML = `
+        <select id="traitExclusion1">
+          <option value="">Select First Trait</option>
+          ${allTraits.map(t => `<option value="${t.layerName}:${t.traitName}">${t.layerName}: ${t.traitName}</option>`).join('')}
+        </select>
+        <select id="traitExclusion2">
+          <option value="">Select Second Trait</option>
+          ${allTraits.map(t => `<option value="${t.layerName}:${t.traitName}">${t.layerName}: ${t.traitName}</option>`).join('')}
+        </select>
+        <button class="cancel-exclusion">Cancel</button>
+      `;
+      document.getElementById('exclusionForm').appendChild(form);
+    };
+
+    const cancelTraitExclusion = () => {
+      document.getElementById('exclusionForm').innerHTML = '';
+    };
+
+    const deleteTraitExclusion = (index) => {
+      if (confirm(`Delete exclusion: ${state.traitExclusions[index].layer1}: ${state.traitExclusions[index].trait1} ↔ ${state.traitExclusions[index].layer2}: ${state.traitExclusions[index].trait2}?`)) {
+        state.traitExclusions.splice(index, 1);
+        updateTraitExclusionUI();
+      }
+    };
+
+    const toggleTraits = (header) => {
+      const traitsDiv = header.nextElementSibling;
+      const layerIndex = parseInt(header.parentElement.dataset.index);
+      state.layers[layerIndex].showTraits = !state.layers[layerIndex].showTraits;
+      traitsDiv.classList.toggle('show');
+      header.querySelector('span').textContent = state.layers[layerIndex].showTraits ? '▼' : '▶';
+    };
+
+    const handleDragStart = (e) => {
+      e.target.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', e.target.dataset.index);
+    };
+
+    const handleDragOver = (e) => e.preventDefault();
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+      const targetIndex = parseInt(e.target.closest('.layer-item').dataset.index);
+      if (draggedIndex !== targetIndex) {
+        const [draggedLayer] = state.layers.splice(draggedIndex, 1);
+        state.layers.splice(targetIndex, 0, draggedLayer);
+        state.layers.forEach((layer, idx) => layer.zIndex = state.layers.length - idx);
+        updateLayersUI();
+      }
+    };
+
+    const handleDragEnd = (e) => e.target.classList.remove('dragging');
+
+    const addLayer = () => {
+      const name = prompt('Enter layer name (e.g., Background):');
+      if (name && !state.layers.some(l => l.name === name)) {
+        const newLayer = {
+          id: Date.now(),
+          name,
+          traits: [],
+          zIndex: state.layers.length + 1,
+          showTraits: true
+        };
+        state.layers.push(newLayer);
+        state.previewTraits.set(name, '');
+        console.log(`Added layer: ${name}, ID: ${newLayer.id}`, state.layers);
+        updateLayersUI();
+      } else if (name) {
+        alert('Layer name must be unique.');
+      }
+    };
+
+    const deleteLayer = (layerId) => {
+      const layer = state.layers.find(l => l.id === layerId);
+      if (confirm(`Delete layer "${layer.name}" and its traits?`)) {
+        state.traitExclusions = state.traitExclusions.filter(ex => ex.layer1 !== layer.name && ex.layer2 !== layer.name);
+        state.layers = state.layers.filter(l => l.id !== layerId);
+        state.previewTraits.delete(layer.name);
+        state.layers.forEach((l, idx) => l.zIndex = state.layers.length - idx);
+        updateLayersUI();
+        updatePreviewCanvas();
+      }
+    };
+
+    const deleteTrait = (layerId, traitIndex) => {
+      const layer = state.layers.find(l => l.id === layerId);
+      const trait = layer.traits[traitIndex];
+      if (confirm(`Delete trait "${trait.name}" from layer "${layer.name}"?`)) {
+        state.traitExclusions = state.traitExclusions.filter(ex => 
+          !(ex.layer1 === layer.name && ex.trait1 === trait.name) &&
+          !(ex.layer2 === layer.name && ex.trait2 === trait.name)
+        );
+        layer.traits.splice(traitIndex, 1);
+        if (state.previewTraits.get(layer.name) === trait.name) {
+          state.previewTraits.set(layer.name, layer.traits[0]?.name || '');
+        }
+        updateLayersUI();
+        updatePreviewCanvas();
+      }
+    };
+
+    const updateTraitWeight = debounce((layerId, traitIndex, value) => {
+      const weight = parseFloat(value);
+      if (isNaN(weight) || weight <= 0) return alert('Weight must be positive.');
+      const layer = state.layers.find(l => l.id === layerId);
+      layer.traits[traitIndex].weight = weight;
+      updateLayersUI();
+    }, 300);
+
+    const addTrait = (layerId) => {
+      console.log(`Adding trait to layer ID: ${layerId}`);
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          console.error('No file selected');
+          return alert('Please select a file.');
+        }
+        if (!file.type.match(/^image\/png$/i)) {
+          console.error(`Invalid file type: ${file.name}, type: ${file.type}`);
+          return alert('Please select a valid PNG file.');
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          console.error(`File too large: ${file.name}, size: ${file.size}`);
+          return alert(`File "${file.name}" is too large (max 10MB).`);
+        }
+        const name = file.name.replace(/\.png$/i, '');
+        const weight = parseFloat(prompt(`Enter rarity weight for "${name}":`) || '10');
+        if (isNaN(weight) || weight <= 0) {
+          console.error(`Invalid weight for ${name}: ${weight}`);
+          return alert('Weight must be positive.');
+        }
+        try {
+          const { img, url } = await loadImage(file, false);
+          URL.revokeObjectURL(url);
+          const layer = state.layers.find(l => l.id === layerId);
+          if (!layer) {
+            console.error(`Layer not found: ID ${layerId}`, state.layers);
+            return alert('Layer not found. Please try refreshing the page.');
+          }
+          layer.traits.push({ name, blob: file, weight });
+          layer.showTraits = true;
+          state.previewTraits.set(layer.name, name);
+          console.log(`Trait added: ${name} to layer ${layer.name}`, layer.traits);
+          updateLayersUI();
+          await updatePreviewCanvas();
+          alert(`Trait "${name}" added successfully.`);
+        } catch (error) {
+          console.error(`Failed to add trait "${file.name}": ${error.message}`);
+          alert(`Failed to load "${file.name}": ${error.message}`);
+        }
+      };
+      input.click();
+    };
+
+    const addTraitFolder = (layerId) => {
+      if (!('webkitdirectory' in HTMLInputElement.prototype)) {
+        console.error('Folder upload not supported');
+        return alert('Folder upload not supported by your browser.');
+      }
+      console.log(`Adding trait folder to layer ID: ${layerId}`);
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.setAttribute('webkitdirectory', '');
+      input.accept = 'image/png';
+      input.multiple = true;
+      input.onchange = async (e) => {
+        const files = Array.from(e.target.files).filter(f => f.type.match(/^image\/png$/i));
+        if (!files.length) {
+          console.error('No PNG files found in folder');
+          return alert('No valid PNG files found in the selected folder.');
+        }
+        const weight = parseFloat(prompt('Enter rarity weight for folder traits:') || '10');
+        if (isNaN(weight) || weight <= 0) {
+          console.error(`Invalid weight for folder: ${weight}`);
+          return alert('Weight must be positive.');
+        }
+        const validFiles = [];
+        const failedFiles = [];
+        for (const file of files) {
+          console.log(`Processing file: ${file.name}`);
+          if (file.size > 10 * 1024 * 1024) {
+            console.error(`File too large: ${file.name}, size: ${file.size}`);
+            failedFiles.push(`${file.name} (too large)`);
+            continue;
+          }
+          try {
+            const { img, url } = await loadImage(file, false);
+            URL.revokeObjectURL(url);
+            validFiles.push(file);
+          } catch (error) {
+            console.error(`Failed to load file: ${file.name}, error: ${error.message}`);
+            failedFiles.push(`${file.name} (${error.message})`);
+          }
+        }
+        if (!validFiles.length) {
+          console.error('No valid PNG images loaded from folder');
+          return alert(`No valid PNG images loaded. Failed files: ${failedFiles.join(', ')}`);
+        }
+        const layer = state.layers.find(l => l.id === layerId);
+        if (!layer) {
+          console.error(`Layer not found: ID ${layerId}`, state.layers);
+          return alert('Layer not found. Please try refreshing the page.');
+        }
+        layer.traits.push(...validFiles.map(f => ({ name: f.name.replace(/\.png$/i, ''), blob: f, weight })));
+        layer.showTraits = true;
+        if (!state.previewTraits.get(layer.name) && validFiles.length) {
+          state.previewTraits.set(layer.name, validFiles[0].name.replace(/\.png$/i, ''));
+        }
+        console.log(`Traits added to layer ${layer.name}:`, layer.traits);
+        updateLayersUI();
+        await updatePreviewCanvas();
+        alert(`Added ${validFiles.length} traits to layer "${layer.name}".${failedFiles.length ? `\nFailed: ${failedFiles.join(', ')}` : ''}`);
+      };
+      input.click();
+    };
+
+    const importProjectFolder = async () => {
+      if (!('webkitdirectory' in HTMLInputElement.prototype)) {
+        console.error('Folder upload not supported');
+        return alert('Folder upload not supported by your browser.');
+      }
+      console.log('Importing project folder');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.setAttribute('webkitdirectory', '');
+      input.accept = 'image/png';
+      input.multiple = true;
+      input.onchange = async (e) => {
+        const files = Array.from(e.target.files).filter(f => f.type.match(/^image\/png$/i));
+        if (!files.length) {
+          console.error('No PNG files found in project folder');
+          return alert('No valid PNG files found in the selected folder.');
+        }
+        state.layers = [];
+        state.previewTraits.clear();
+        state.traitExclusions = [];
+        const projectStructure = {};
+        const failedFiles = [];
+        for (const file of files) {
+          console.log(`Processing project file: ${file.webkitRelativePath || file.name}`);
+          if (file.size > 10 * 1024 * 1024) {
+            console.error(`File too large: ${file.name}, size: ${file.size}`);
+            failedFiles.push(`${file.name} (too large)`);
+            continue;
+          }
+          try {
+            const { img, url } = await loadImage(file, false);
+            URL.revokeObjectURL(url);
+            const pathParts = file.webkitRelativePath ? file.webkitRelativePath.split('/') : [file.name];
+            let layerName = 'DefaultLayer';
+            let traitName = file.name.replace(/\.png$/i, '');
+            let weight = 10;
+            if (pathParts.length >= 3) {
+              layerName = pathParts[1];
+              const rarity = pathParts[2].toLowerCase();
+              traitName = pathParts[3].replace(/\.png$/i, '');
+              weight = rarity === 'rare' ? 1 : 10;
+            } else if (pathParts.length === 1) {
+              layerName = 'ImportedLayer';
+            } else {
+              layerName = pathParts[0] || 'ImportedLayer';
+              traitName = pathParts[1]?.replace(/\.png$/i, '') || traitName;
+            }
+            if (!projectStructure[layerName]) {
+              projectStructure[layerName] = [];
+            }
+            projectStructure[layerName].push({ file, name: traitName, weight });
+          } catch (error) {
+            console.error(`Failed to load file: ${file.name}, error: ${error.message}`);
+            failedFiles.push(`${file.name} (${error.message})`);
+          }
+        }
+        console.log('Project structure:', projectStructure);
+        if (!Object.keys(projectStructure).length) {
+          console.error('No valid layers created from project files');
+          return alert(`No valid layers or traits found. Failed files: ${failedFiles.join(', ')}`);
+        }
+        Object.keys(projectStructure).forEach((layerName, index) => {
+          const traits = projectStructure[layerName].map(({ file, name, weight }) => ({
+            name,
+            blob: file,
+            weight
+          }));
+          if (traits.length) {
+            state.layers.push({
+              id: Date.now() + index,
+              name: layerName,
+              traits,
+              zIndex: state.layers.length + 1,
+              showTraits: true
+            });
+            state.previewTraits.set(layerName, traits[0].name);
+          }
+        });
+        console.log('Layers after import:', state.layers);
+        if (!state.layers.length) {
+          console.error('No layers created after processing');
+          return alert(`No valid layers or traits found. Failed files: ${failedFiles.join(', ')}`);
+        }
+        updateLayersUI();
+        await updatePreviewCanvas();
+        alert(`Imported ${state.layers.length} layers with ${state.layers.reduce((sum, l) => sum + l.traits.length, 0)} traits.${failedFiles.length ? `\nFailed: ${failedFiles.join(', ')}` : ''}`);
+      };
+      input.click();
+    };
+
+    const updatePreviewControls = () => {
+      console.log('Updating preview controls', state.previewTraits);
+      document.getElementById('previewControls').innerHTML = state.layers.map(layer => `
+        <div>
+          <label>${layer.name}:</label>
+          <select>
+            <option value="">Select Trait</option>
+            ${layer.traits.map(t => `<option value="${t.name}" ${state.previewTraits.get(layer.name) === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
+          </select>
+        </div>
+      `).join('');
+      updatePreviewCanvas();
+    };
+
+    const updatePreviewTrait = (layerName, traitName) => {
+      console.log(`Updating preview trait for ${layerName}: ${traitName}`);
+      state.previewTraits.set(layerName, traitName);
+      updatePreviewCanvas();
+    };
+
+    const updatePreviewCanvas = async () => {
+      console.log('Updating preview canvas', state.previewTraits);
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!state.layers.length || !Array.from(state.previewTraits.values()).some(t => t)) {
+        ctx.fillStyle = document.body.classList.contains('purple-theme') ? '#ff00ff' : '#00ff00';
+        ctx.font = '10px JetBrains Mono';
+        ctx.fillText('No traits selected or layers available', 10, 20);
+        console.log('No traits or layers to render');
+        return;
+      }
+      const sortedLayers = [...state.layers].sort((a, b) => a.zIndex - b.zIndex);
+      const urls = [];
+      for (const layer of sortedLayers) {
+        const traitName = state.previewTraits.get(layer.name);
+        const trait = layer.traits.find(t => t.name === traitName);
+        if (trait?.blob) {
+          try {
+            console.log(`Rendering trait: ${layer.name}/${traitName}`);
+            const { img, url } = await loadImage(trait.blob, true);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            urls.push(url);
+          } catch (error) {
+            console.error(`Failed to render trait ${layer.name}/${traitName}: ${error.message}`);
+          }
+        } else {
+          console.log(`No valid trait found for ${layer.name}/${traitName}`);
+        }
+      }
+      urls.forEach(url => {
+        console.log(`Revoking URL: ${url}`);
+        URL.revokeObjectURL(url);
+      });
+    };
+
+    const previewRandomNFT = async () => {
+      if (!state.layers.length || state.layers.some(l => !l.traits.length)) {
+        console.error('Cannot preview: No layers or traits available');
+        return alert('Add at least one trait per layer.');
+      }
+      console.log('Generating random NFT preview');
+      let combination = {};
+      let attempts = 0;
+      const maxAttempts = 100;
+      while (attempts < maxAttempts) {
+        attempts++;
+        combination = {};
+        let violatesExclusion = false;
+        for (const layer of state.layers) {
+          const totalWeight = layer.traits.reduce((sum, t) => sum + t.weight, 0);
+          let random = Math.random() * totalWeight;
+          let selectedTrait = layer.traits[0];
+          for (const trait of layer.traits) {
+            random -= trait.weight;
+            if (random <= 0) {
+              selectedTrait = trait;
+              break;
+            }
+          }
+          combination[layer.name] = selectedTrait.name;
+        }
+        for (const exclusion of state.traitExclusions) {
+          const trait1Present = combination[exclusion.layer1] === exclusion.trait1;
+          const trait2Present = combination[exclusion.layer2] === exclusion.trait2;
+          if (trait1Present && trait2Present) {
+            violatesExclusion = true;
+            console.log(`Excluded combination detected: ${exclusion.layer1}:${exclusion.trait1} with ${exclusion.layer2}:${exclusion.trait2}`);
+            break;
+          }
+        }
+        if (!violatesExclusion) break;
+      }
+      if (attempts >= maxAttempts) {
+        console.error('Failed to generate NFT satisfying exclusion rules');
+        return alert('Cannot generate NFT satisfying exclusion rules.');
+      }
+      state.previewTraits.forEach((_, layerName) => state.previewTraits.set(layerName, combination[layerName] || ''));
+      console.log('Random NFT combination:', combination);
+      updatePreviewControls();
+      await updatePreviewCanvas();
+    };
+
+    const generatePreviewGallery = async () => {
+      if (state.isGeneratingGallery) return;
+      state.isGeneratingGallery = true;
+      const generateButton = document.getElementById('generateGalleryButton');
+      const progressContainer = document.getElementById('galleryProgress');
+      const progressBar = document.getElementById('galleryProgressBar');
+      const progressText = document.getElementById('galleryProgressText');
+      const cancelButton = document.getElementById('cancelGalleryButton');
+      const spinner = document.getElementById('gallerySpinner');
+      generateButton.disabled = true;
+      generateButton.textContent = 'Generating...';
+      progressContainer.classList.add('show');
+      cancelButton.style.display = 'block';
+      spinner.classList.add('show');
+      try {
+        if (!state.layers.length || state.layers.some(l => !l.traits.length)) throw new Error('Add at least one trait per layer.');
+        const count = Math.min(parseInt(document.getElementById('nftCount').value) || 100, 2222);
+        const galleryGrid = document.getElementById('galleryGrid');
+        galleryGrid.innerHTML = '';
+        state.galleryItems = [];
+        state.oneOfOneItems.clear();
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+        const generated = new Set();
+        const nfts = [];
+        let attempts = 0;
+        const maxAttempts = 10000;
+        while (nfts.length < count && generated.size < 10000 && attempts < maxAttempts) {
+          attempts++;
+          const combination = {};
+          for (const layer of state.layers) {
+            const totalWeight = layer.traits.reduce((sum, t) => sum + t.weight, 0);
+            let random = Math.random() * totalWeight;
+            let selectedTrait = layer.traits[0];
+            for (const trait of layer.traits) {
+              random -= trait.weight;
+              if (random <= 0) {
+                selectedTrait = trait;
+                break;
+              }
+            }
+            combination[layer.name] = selectedTrait.name;
+          }
+          let violatesExclusion = false;
+          for (const exclusion of state.traitExclusions) {
+            const trait1Present = combination[exclusion.layer1] === exclusion.trait1;
+            const trait2Present = combination[exclusion.layer2] === exclusion.trait2;
+            if (trait1Present && trait2Present) {
+              violatesExclusion = true;
+              console.log(`Excluded combination detected: ${exclusion.layer1}:${exclusion.trait1} with ${exclusion.layer2}:${exclusion.trait2}`);
+              break;
+            }
+          }
+          if (violatesExclusion) continue;
+          const comboKey = JSON.stringify(combination);
+          if (!generated.has(comboKey)) {
+            generated.add(comboKey);
+            nfts.push(combination);
+            attempts = 0;
+          }
+        }
+        if (nfts.length < count) throw new Error(`Not enough unique combinations for ${count} NFTs. Generated ${nfts.length}.`);
+        for (let i = 0; i < nfts.length; i++) {
+          if (!state.isGeneratingGallery) throw new Error('Generation cancelled');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const sortedLayers = [...state.layers].sort((a, b) => a.zIndex - b.zIndex);
+          const urls = [];
+          for (const layer of sortedLayers) {
+            const traitName = nfts[i][layer.name];
+            const trait = layer.traits.find(t => t.name === traitName);
+            if (trait?.blob) {
+              try {
+                const { img, url } = await loadImage(trait.blob, true);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                urls.push(url);
+              } catch (error) {
+                console.error(`Gallery preview failed for ${layer.name}/${traitName} (NFT ${i + 1}): ${error.message}`);
+              }
+            }
+          }
+          urls.forEach(url => URL.revokeObjectURL(url));
+          const thumbnailData = canvas.toDataURL('image/png');
+          const fullCanvas = document.createElement('canvas');
+          fullCanvas.width = 500;
+          fullCanvas.height = 500;
+          const fullCtx = fullCanvas.getContext('2d');
+          for (const layer of sortedLayers) {
+            const traitName = nfts[i][layer.name];
+            const trait = layer.traits.find(t => t.name === traitName);
+            if (trait?.blob) {
+              try {
+                const { img, url } = await loadImage(trait.blob, true);
+                fullCtx.drawImage(img, 0, 0, fullCanvas.width, fullCanvas.height);
+                URL.revokeObjectURL(url);
+              } catch (error) {
+                console.error(`Full-size preview failed for ${layer.name}/${traitName} (NFT ${i + 1}): ${error.message}`);
+              }
+            }
+          }
+          const imageData = fullCanvas.toDataURL('image/png');
+          state.galleryItems.push({ imageData, thumbnailData, combination: nfts[i] });
+          const galleryItem = document.createElement('div');
+          galleryItem.className = 'gallery-item';
+          galleryItem.innerHTML = `<img src="${thumbnailData}" alt="NFT Preview ${i + 1}">`;
+          galleryItem.dataset.index = i;
+          galleryGrid.appendChild(galleryItem);
+          const progress = ((i + 1) / nfts.length) * 100;
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${Math.round(progress)}%`;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        if (!state.galleryItems.length) throw new Error('No valid NFTs generated.');
+      } catch (error) {
+        alert(`Failed to generate gallery: ${error.message}`);
+      } finally {
+        state.isGeneratingGallery = false;
+        generateButton.disabled = false;
+        generateButton.textContent = 'Generate Preview NFTs';
+        progressContainer.classList.remove('show');
+        cancelButton.style.display = 'none';
+        spinner.classList.remove('show');
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+      }
+    };
+
+    const cancelGalleryGeneration = () => {
+      state.isGeneratingGallery = false;
+    };
+
+    const replaceWithOneOfOne = async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          console.error('No file selected for 1/1');
+          return alert('Please select a file.');
+        }
+        if (!file.type.match(/^image\/png$/i)) {
+          console.error(`Invalid file type: ${file.name}, type: ${file.type}`);
+          return alert('Please select a valid PNG file.');
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          console.error(`File too large: ${file.name}, size: ${file.size}`);
+          return alert(`File "${file.name}" is too large (max 10MB).`);
+        }
+        try {
+          const { img, url } = await loadImage(file, true);
+          const fullCanvas = document.createElement('canvas');
+          fullCanvas.width = 500;
+          fullCanvas.height = 500;
+          const fullCtx = fullCanvas.getContext('2d');
+          fullCtx.drawImage(img, 0, 0, fullCanvas.width, fullCanvas.height);
+          const imageData = fullCanvas.toDataURL('image/png');
+          const thumbnailCanvas = document.createElement('canvas');
+          thumbnailCanvas.width = 100;
+          thumbnailCanvas.height = 100;
+          const thumbnailCtx = thumbnailCanvas.getContext('2d');
+          thumbnailCtx.drawImage(img, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
+          const thumbnailData = thumbnailCanvas.toDataURL('image/png');
+          URL.revokeObjectURL(url);
+
+          const item = state.galleryItems[state.currentModalIndex];
+          item.imageData = imageData;
+          item.thumbnailData = thumbnailData;
+          item.combination = {};
+          state.oneOfOneItems.set(state.currentModalIndex, {
+            imageBlob: file,
+            customTraits: []
+          });
+
+          const galleryGrid = document.getElementById('galleryGrid');
+          const galleryItem = galleryGrid.children[state.currentModalIndex];
+          if (galleryItem) {
+            galleryItem.innerHTML = `<img src="${thumbnailData}" alt="NFT Preview ${state.currentModalIndex + 1}">`;
+          }
+
+          updateModalContent();
+          document.getElementById('customTraitsSection').style.display = 'block';
+          alert('1/1 image uploaded successfully. Add custom traits below.');
+        } catch (error) {
+          console.error(`Failed to upload 1/1 image "${file.name}": ${error.message}`);
+          alert(`Failed to upload "${file.name}": ${error.message}`);
+        }
+      };
+      input.click();
+    };
+
+    const addCustomTrait = () => {
+      const oneOfOneData = state.oneOfOneItems.get(state.currentModalIndex);
+      if (!oneOfOneData) return alert('This NFT is not a 1/1. Replace with a 1/1 image first.');
+      const customTraitList = document.getElementById('customTraitList');
+      const traitItem = document.createElement('div');
+      traitItem.className = 'custom-trait-item';
+      const id = Date.now();
+      traitItem.dataset.id = id;
+      traitItem.innerHTML = `
+        <input type="text" placeholder="Layer Name" class="custom-layer-input">
+        <input type="text" placeholder="Trait Name" class="custom-trait-input">
+        <button class="delete-custom-trait">🗑️</button>
+      `;
+      customTraitList.appendChild(traitItem);
+      oneOfOneData.customTraits.push({ layerName: '', traitName: '', id });
+      updateModalContent();
+    };
+
+    const openModal = (index) => {
+      state.currentModalIndex = index;
+      updateModalContent();
+      document.getElementById('nftModal').style.display = 'flex';
+      updateModalNavButtons();
+    };
+
+    const updateModalContent = () => {
+      const item = state.galleryItems[state.currentModalIndex];
+      if (!item) return;
+      const modalImage = document.getElementById('modalImage');
+      const modalTraitList = document.getElementById('modalTraitList');
+      const modalTraitEditor = document.getElementById('modalTraitEditor');
+      const customTraitList = document.getElementById('customTraitList');
+      const modalCounter = document.getElementById('modalCounter');
+      const nftName = document.getElementById('nftName');
+      const customTraitsSection = document.getElementById('customTraitsSection');
+      modalImage.classList.add('fade');
+      setTimeout(() => {
+        modalImage.src = item.imageData;
+        modalImage.classList.remove('fade');
+      }, 300);
+      const isOneOfOne = state.oneOfOneItems.has(state.currentModalIndex);
+      customTraitsSection.style.display = isOneOfOne ? 'block' : 'none';
+      if (isOneOfOne) {
+        const oneOfOneData = state.oneOfOneItems.get(state.currentModalIndex);
+        modalTraitList.innerHTML = oneOfOneData.customTraits
+          .filter(t => t.layerName && t.traitName)
+          .map(t => `<div>${t.layerName}: ${t.traitName}</div>`)
+          .join('');
+        modalTraitEditor.innerHTML = '';
+        customTraitList.innerHTML = oneOfOneData.customTraits.map(t => `
+          <div class="custom-trait-item" data-id="${t.id}">
+            <input type="text" placeholder="Layer Name" class="custom-layer-input" value="${t.layerName}">
+            <input type="text" placeholder="Trait Name" class="custom-trait-input" value="${t.traitName}">
+            <button class="delete-custom-trait">🗑️</button>
+          </div>
+        `).join('');
+      } else {
+        modalTraitList.innerHTML = Object.entries(item.combination)
+          .map(([layer, trait]) => `<div>${layer}: ${trait}</div>`)
+          .join('');
+        modalTraitEditor.innerHTML = state.layers.map(layer => `
+          <div>
+            <label>${layer.name}:</label>
+            <select>
+              <option value="">Select Trait</option>
+              ${layer.traits.map(t => `<option value="${t.name}" ${item.combination[layer.name] === t.name ? 'selected' : ''}>${t.name}</option>`).join('')}
+            </select>
+          </div>
+        `).join('');
+      }
+      modalCounter.textContent = `${state.currentModalIndex + 1}/${state.galleryItems.length}`;
+      nftName.textContent = createMetadata(state.currentModalIndex + 1, item.combination, state.layers).name;
+      checkForDuplicates();
+    };
+
+    const updateModalTrait = async (layerName, traitName) => {
+      const item = state.galleryItems[state.currentModalIndex];
+      if (!item) return;
+      if (state.oneOfOneItems.has(state.currentModalIndex)) {
+        alert('Cannot change traits for a 1/1 NFT. Use custom traits instead.');
+        return;
+      }
+      item.combination[layerName] = traitName;
+      const fullCanvas = document.createElement('canvas');
+      fullCanvas.width = 500;
+      fullCanvas.height = 500;
+      const fullCtx = fullCanvas.getContext('2d');
+      const sortedLayers = [...state.layers].sort((a, b) => a.zIndex - b.zIndex);
+      const urls = [];
+      for (const layer of sortedLayers) {
+        const selectedTraitName = item.combination[layer.name];
+        const trait = layer.traits.find(t => t.name === selectedTraitName);
+        if (trait?.blob) {
+          try {
+            const { img, url } = await loadImage(trait.blob, true);
+            fullCtx.drawImage(img, 0, 0, fullCanvas.width, fullCanvas.height);
+            urls.push(url);
+          } catch (error) {
+            console.error(`Modal preview failed for ${layer.name}/${selectedTraitName}: ${error.message}`);
+          }
+        }
+      }
+      urls.forEach(url => URL.revokeObjectURL(url));
+      item.imageData = fullCanvas.toDataURL('image/png');
+      const thumbnailCanvas = document.createElement('canvas');
+      thumbnailCanvas.width = 100;
+      thumbnailCanvas.height = 100;
+      const thumbnailCtx = thumbnailCanvas.getContext('2d');
+      for (const layer of sortedLayers) {
+        const selectedTraitName = item.combination[layer.name];
+        const trait = layer.traits.find(t => t.name === selectedTraitName);
+        if (trait?.blob) {
+          try {
+            const { img, url } = await loadImage(trait.blob, true);
+            thumbnailCtx.drawImage(img, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
+            URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error(`Thumbnail failed for ${layer.name}/${selectedTraitName}: ${error.message}`);
+          }
+        }
+      }
+      item.thumbnailData = thumbnailCanvas.toDataURL('image/png');
+      const galleryGrid = document.getElementById('galleryGrid');
+      const galleryItem = galleryGrid.children[state.currentModalIndex];
+      if (galleryItem) galleryItem.innerHTML = `<img src="${item.thumbnailData}" alt="NFT Preview ${state.currentModalIndex + 1}">`;
+      const modalImage = document.getElementById('modalImage');
+      modalImage.classList.add('fade');
+      setTimeout(() => {
+        modalImage.src = item.imageData;
+        modalImage.classList.remove('fade');
+      }, 300);
+      const modalTraitList = document.getElementById('modalTraitList');
+      modalTraitList.innerHTML = Object.entries(item.combination).map(([layer, trait]) => `<div>${layer}: ${trait}</div>`).join('');
+      document.getElementById('nftName').textContent = createMetadata(state.currentModalIndex + 1, item.combination, state.layers).name;
+      checkForDuplicates();
+    };
+
+    const updateModalNavButtons = () => {
+      const prevButton = document.getElementById('prevButton');
+      const nextButton = document.getElementById('nextButton');
+      prevButton.disabled = state.currentModalIndex === 0;
+      nextButton.disabled = state.currentModalIndex === state.galleryItems.length - 1;
+    };
+
+    const previousNFT = () => {
+      if (state.currentModalIndex > 0) {
+        state.currentModalIndex--;
+        updateModalContent();
+        updateModalNavButtons();
+      }
+    };
+
+    const nextNFT = () => {
+      if (state.currentModalIndex < state.galleryItems.length - 1) {
+        state.currentModalIndex++;
+        updateModalContent();
+        updateModalNavButtons();
+      }
+    };
+
+    const closeModal = () => {
+      document.getElementById('nftModal').style.display = 'none';
+    };
+
+    const checkForDuplicates = () => {
+      const currentItem = state.galleryItems[state.currentModalIndex];
+      if (!currentItem || state.oneOfOneItems.has(state.currentModalIndex)) {
+        document.getElementById('duplicateWarning').classList.remove('show');
+        return;
+      }
+      const currentComboKey = JSON.stringify(currentItem.combination);
+      const isDuplicate = state.galleryItems.some((item, i) => 
+        i !== state.currentModalIndex && 
+        !state.oneOfOneItems.has(i) && 
+        JSON.stringify(item.combination) === currentComboKey
+      );
+      document.getElementById('duplicateWarning').classList.toggle('show', isDuplicate);
+    };
+
+    const downloadCurrentNFT = async () => {
+      const item = state.galleryItems[state.currentModalIndex];
+      if (!item) return;
+      const downloadButton = document.getElementById('downloadNFTModalButton');
+      downloadButton.disabled = true;
+      downloadButton.textContent = 'Downloading...';
+      try {
+        const zip = new JSZip();
+        const metadata = createMetadata(state.currentModalIndex + 1, item.combination, state.layers);
+        const imageBlob = state.oneOfOneItems.has(state.currentModalIndex)
+          ? state.oneOfOneItems.get(state.currentModalIndex).imageBlob
+          : await (await fetch(item.imageData)).blob();
+        zip.file(`${state.currentModalIndex + 1}.png`, imageBlob);
+        zip.file(`${state.currentModalIndex + 1}.json`, JSON.stringify(metadata, null, 2));
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `${metadata.name}.zip`);
+      } catch (error) {
+        alert(`Failed to download NFT: ${error.message}`);
+      } finally {
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Download NFT';
+      }
+    };
+
+    const downloadNFTs = async () => {
+      if (state.isDownloadingNFTs) return;
+      state.isDownloadingNFTs = true;
+      const downloadButton = document.getElementById('downloadNFTsButton');
+      const progressContainer = document.getElementById('nftProgress');
+      const progressBar = document.getElementById('nftProgressBar');
+      const progressText = document.getElementById('nftProgressText');
+      const cancelButton = document.getElementById('cancelNFTButton');
+      const spinner = document.getElementById('nftSpinner');
+      downloadButton.disabled = true;
+      downloadButton.textContent = 'Downloading...';
+      progressContainer.classList.add('show');
+      cancelButton.style.display = 'block';
+      spinner.classList.add('show');
+      try {
+        if (!state.galleryItems.length) throw new Error('No NFTs to download. Generate preview gallery first.');
+        const zip = new JSZip();
+        const title = document.getElementById('metadataTitle').value.trim() || 'Super NFT';
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+        for (let i = 0; i < state.galleryItems.length; i++) {
+          if (!state.isDownloadingNFTs) throw new Error('Download cancelled');
+          const item = state.galleryItems[i];
+          const metadata = createMetadata(i + 1, item.combination, state.layers);
+          const imageBlob = state.oneOfOneItems.has(i)
+            ? state.oneOfOneItems.get(i).imageBlob
+            : await (await fetch(item.imageData)).blob();
+          zip.file(`${i + 1}.png`, imageBlob);
+          zip.file(`${i + 1}.json`, JSON.stringify(metadata, null, 2));
+          const progress = ((i + 1) / state.galleryItems.length) * 100;
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = `${Math.round(progress)}%`;
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `${sanitizedTitle}_NFTs.zip`);
+      } catch (error) {
+        alert(`Failed to download NFTs: ${error.message}`);
+      } finally {
+        state.isDownloadingNFTs = false;
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Download NFTs';
+        progressContainer.classList.remove('show');
+        cancelButton.style.display = 'none';
+        spinner.classList.remove('show');
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+      }
+    };
+
+    const cancelNFTDownload = () => {
+      state.isDownloadingNFTs = false;
+    };
+
+    const toggleTheme = () => {
+      document.body.classList.toggle('purple-theme');
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      updatePreviewCanvas();
+    };
+
+    const initEventListeners = () => {
+      document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('theme-toggle')) toggleTheme();
+        if (target.closest('.layer-header') && !target.classList.contains('delete-button')) toggleTraits(target.closest('.layer-header'));
+        if (target.matches('.trait-rarity-header')) toggleTraitRarity();
+        if (target.matches('.trait-exclusion-header')) toggleTraitExclusion();
+        if (target.matches('.cancel-exclusion')) cancelTraitExclusion();
+        if (target.matches('#generateGalleryButton')) generatePreviewGallery();
+        if (target.matches('#cancelGalleryButton')) cancelGalleryGeneration();
+        if (target.matches('#downloadNFTsButton')) downloadNFTs();
+        if (target.matches('#cancelNFTButton')) cancelNFTDownload();
+        if (target.matches('#downloadNFTModalButton')) downloadCurrentNFT();
+        if (target.matches('#replaceOneButton')) replaceWithOneOfOne();
+        if (target.matches('#addCustomTraitButton')) addCustomTrait();
+        if (target.matches('#exportMetadataButton')) exportNewMetadata();
+        if (target.matches('.close-modal')) closeModal();
+        if (target.matches('#prevButton')) previousNFT();
+        if (target.matches('#nextButton')) nextNFT();
+        if (target.closest('.gallery-item')) openModal(parseInt(target.closest('.gallery-item').dataset.index));
+        if (target.matches('.sidebar button') && target.textContent === 'Add Layer') addLayer();
+        if (target.matches('.sidebar button') && target.textContent === 'Import Project') importProjectFolder();
+        if (target.matches('.layer-traits button') && target.textContent === 'Add Trait') {
+          const layerId = parseInt(target.closest('.layer-item').dataset.id);
+          console.log(`Clicked Add Trait for layer ID: ${layerId}`);
+          addTrait(layerId);
+        }
+        if (target.matches('.layer-traits button') && target.textContent === 'Add Trait Folder') {
+          const layerId = parseInt(target.closest('.layer-item').dataset.id);
+          console.log(`Clicked Add Trait Folder for layer ID: ${layerId}`);
+          addTraitFolder(layerId);
+        }
+        if (target.matches('.trait-exclusion-content button') && target.textContent === 'Add Trait Exclusion') {
+          addTraitExclusion();
+        }
+        if (target.matches('.preview-buttons button') && target.textContent === 'Preview Random NFT') {
+          previewRandomNFT();
+        }
+        if (target.matches('.delete-custom-trait')) {
+          const traitItem = target.closest('.custom-trait-item');
+          const id = parseInt(traitItem.dataset.id);
+          const oneOfOneData = state.oneOfOneItems.get(state.currentModalIndex);
+          if (oneOfOneData) {
+            oneOfOneData.customTraits = oneOfOneData.customTraits.filter(t => t.id !== id);
+            updateModalContent();
+          }
+        }
+      });
+
+      document.addEventListener('change', (e) => {
+        const target = e.target;
+        if (target.matches('.trait-weight')) {
+          const layerIndex = parseInt(target.closest('.layer-item').dataset.index);
+          const traitIndex = Array.from(target.closest('.trait-item').parentElement.querySelectorAll('.trait-item')).indexOf(target.closest('.trait-item'));
+          updateTraitWeight(state.layers[layerIndex].id, traitIndex, target.value);
+        }
+        if (target.matches('#previewControls select')) {
+          const layerName = target.previousElementSibling.textContent.replace(':', '');
+          updatePreviewTrait(layerName, target.value);
+        }
+        if (target.matches('#modalTraitEditor select')) {
+          const layerName = target.previousElementSibling.textContent.replace(':', '');
+          updateModalTrait(layerName, target.value);
+        }
+        if (target.matches('#traitExclusion1') || target.matches('#traitExclusion2')) {
+          const form = target.closest('.trait-exclusion-form');
+          const trait1 = form.querySelector('#traitExclusion1').value;
+          const trait2 = form.querySelector('#traitExclusion2').value;
+          if (trait1 && trait2) {
+            if (trait1 === trait2) return alert('Cannot exclude a trait from itself.');
+            const [layer1, traitName1] = trait1.split(':');
+            const [layer2, traitName2] = trait2.split(':');
+            if (state.traitExclusions.some(ex => 
+              (ex.layer1 === layer1 && ex.trait1 === traitName1 && ex.layer2 === layer2 && ex.trait2 === traitName2) ||
+              (ex.layer1 === layer2 && ex.trait1 === traitName2 && ex.layer2 === layer1 && ex.trait2 === traitName1)
+            )) {
+              return alert('Exclusion rule already exists.');
+            }
+            state.traitExclusions.push({ layer1, trait1: traitName1, layer2, trait2: traitName2 });
+            updateTraitExclusionUI();
+            document.getElementById('exclusionForm').innerHTML = '';
+            alert(`Added exclusion: ${layer1}: ${traitName1} ↔ ${layer2}: ${traitName2}`);
+            previewRandomNFT();
+          }
+        }
+        if (target.matches('.custom-layer-input') || target.matches('.custom-trait-input')) {
+          const traitItem = target.closest('.custom-trait-item');
+          const id = parseInt(traitItem.dataset.id);
+          const oneOfOneData = state.oneOfOneItems.get(state.currentModalIndex);
+          if (oneOfOneData) {
+            const trait = oneOfOneData.customTraits.find(t => t.id === id);
+            if (trait) {
+              if (target.classList.contains('custom-layer-input')) {
+                trait.layerName = target.value.trim();
+              } else {
+                trait.traitName = target.value.trim();
+              }
+              updateModalContent();
+            }
+          }
+        }
+        if (target.matches('#ipfsCID')) {
+          const exportContainer = document.getElementById('exportMetadataContainer');
+          exportContainer.style.display = target.value.trim() ? 'block' : 'none';
+        }
+      });
+
+      document.addEventListener('dragstart', (e) => {
+        if (e.target.matches('.layer-item')) handleDragStart(e);
+      });
+
+      document.addEventListener('dragover', (e) => {
+        if (e.target.closest('.layer-item')) handleDragOver(e);
+      });
+
+      document.addEventListener('drop', (e) => {
+        if (e.target.closest('.layer-item')) handleDrop(e);
+      });
+
+      document.addEventListener('dragend', (e) => {
+        if (e.target.matches('.layer-item')) handleDragEnd(e);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (e.target.matches('.delete-button')) {
+          const layerItem = e.target.closest('.layer-item');
+          const traitItem = e.target.closest('.trait-item');
+          const exclusionItem = e.target.closest('.exclusion-item');
+          if (layerItem && !traitItem && !exclusionItem) {
+            const layerId = parseInt(layerItem.dataset.id);
+            console.log(`Deleting layer ID: ${layerId}`);
+            deleteLayer(layerId);
+          } else if (traitItem) {
+            const layerId = parseInt(traitItem.closest('.layer-item').dataset.id);
+            const traitNodes = Array.from(traitItem.parentElement.querySelectorAll('.trait-item'));
+            const traitIndex = traitNodes.indexOf(traitItem);
+            console.log(`Deleting trait index ${traitIndex} from layer ID: ${layerId}`);
+            deleteTrait(layerId, traitIndex);
+          } else if (exclusionItem) {
+            const index = Array.from(exclusionItem.parentElement.children).indexOf(exclusionItem);
+            console.log(`Deleting trait exclusion index: ${index}`);
+            deleteTraitExclusion(index);
+          }
+        }
+      });
+    };
+
+    initBackgroundAnimation();
+    initEventListeners();
+  </script>
+</body>
+</html>
